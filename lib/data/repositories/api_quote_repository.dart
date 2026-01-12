@@ -15,16 +15,15 @@ import '../models/quote_model.dart';
 /// - Handles errors gracefully without exposing implementation details
 class ApiQuoteRepository implements QuoteRepository {
   final http.Client _httpClient;
-  
+
   // API endpoint for random quotes
   static const String _baseUrl = 'https://zenquotes.io';
-static const String _randomEndpoint = '/api/random';
-
+  static const String _randomEndpoint = '/api/random';
 
   /// Constructor with dependency injection
   /// Allows for easy testing by injecting mock http client
   ApiQuoteRepository({http.Client? httpClient})
-      : _httpClient = httpClient ?? http.Client();
+    : _httpClient = httpClient ?? http.Client();
 
   @override
   Future<Quote> getDailyQuote() async {
@@ -42,7 +41,9 @@ static const String _randomEndpoint = '/api/random';
           .timeout(
             const Duration(seconds: 10),
             onTimeout: () {
-              throw Exception('Request timeout. Please check your internet connection.');
+              throw Exception(
+                'Request timeout. Please check your internet connection.',
+              );
             },
           );
 
@@ -50,14 +51,13 @@ static const String _randomEndpoint = '/api/random';
       if (response.statusCode == 200) {
         // Parse JSON response
         final List<dynamic> jsonList = json.decode(response.body);
-final Map<String, dynamic> jsonData = jsonList.first;
+        final Map<String, dynamic> jsonData = jsonList.first;
 
-final quoteModel = QuoteModel(
-  text: jsonData['q'] as String,
-  author: jsonData['a'] as String,
-);
+        final quoteModel = QuoteModel(
+          text: jsonData['q'] as String,
+          author: jsonData['a'] as String,
+        );
 
-        
         // Return as domain entity
         // QuoteModel extends Quote, so it's already a Quote entity
         return quoteModel;
@@ -65,15 +65,25 @@ final quoteModel = QuoteModel(
         throw Exception('Quote not found. Please try again.');
       } else if (response.statusCode >= 500) {
         throw Exception('Server error. Please try again later.');
+      } else if (response.statusCode == 429) {
+        throw Exception(
+          'You are requesting quotes too frequently. Please wait a moment and try again.',
+        );
       } else {
-        throw Exception('Failed to load quote. Status code: ${response.statusCode}');
+        throw Exception(
+          'Failed to load quote. Status code: ${response.statusCode}',
+        );
       }
     } on SocketException {
       // No internet connection or DNS resolution failed
-      throw Exception('No internet connection. Please check your network settings.');
+      throw Exception(
+        'No internet connection. Please check your network settings.',
+      );
     } on HandshakeException {
       // SSL/TLS handshake error (certificate issues)
-      throw Exception('Secure connection failed. Please check your internet connection and try again.');
+      throw Exception(
+        'Secure connection failed. Please check your internet connection and try again.',
+      );
     } on http.ClientException {
       // Other network-related errors (connection refused, etc.)
       throw Exception('Network error. Please check your internet connection.');
