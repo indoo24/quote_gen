@@ -1,89 +1,137 @@
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/quote.dart';
 import '../../domain/repositories/quote_repository.dart';
+import '../../data/datasources/favorites_local_datasource.dart';
 
-/// Quote Provider
-/// Manages the state for quotes including favorites and daily quote
+/// QuoteProvider
+/// Manages quotes state, favorites, loading and error handling
+/// Integrates with local storage to persist favorites between app sessions
 class QuoteProvider extends ChangeNotifier {
   final QuoteRepository _repository;
+  final FavoritesLocalDataSource? _localDataSource;
 
-  QuoteProvider(this._repository);
+  QuoteProvider(this._repository, {FavoritesLocalDataSource? localDataSource})
+      : _localDataSource = localDataSource {
+    // Load cached favorites on initialization
+    _loadCachedFavorites();
+  }
 
-  // Current daily quote
+  // Current quote
   Quote? _currentQuote;
   Quote? get currentQuote => _currentQuote;
 
-  // Favorite quotes list
+  // Favorites
   final List<Quote> _favorites = [];
   List<Quote> get favorites => List.unmodifiable(_favorites);
 
-  // Loading state
+  // Loading & error states
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  // Error message
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  /// Load the daily quote on app start
+  // Prevent multiple rapid API calls (rate-limit protection)
+  bool _isFetching = false;
+
+  /// Load daily quote (called on app start)
   Future<void> loadDailyQuote() async {
-    _setLoading(true);
-    _clearError();
+    if (_isFetching) return;
+
+    _startLoading();
 
     try {
       _currentQuote = await _repository.getDailyQuote();
-      notifyListeners();
+      _clearError();
     } catch (e) {
-      _setError('Failed to load quote: $e');
+      _setError(e.toString());
     } finally {
-      _setLoading(false);
+      _stopLoading();
     }
   }
 
-  /// Refresh to get a new random quote
+  /// Fetch a new random quote
   Future<void> refreshQuote() async {
-    _setLoading(true);
-    _clearError();
+    if (_isFetching) return;
+
+    _startLoading();
 
     try {
       _currentQuote = await _repository.getRandomQuote();
-      notifyListeners();
+      _clearError();
     } catch (e) {
-      _setError('Failed to refresh quote: $e');
+      _setError(e.toString());
     } finally {
-      _setLoading(false);
+      _stopLoading();
     }
   }
 
-  /// Toggle favorite status for a quote
+  /// Favorites handling
   void toggleFavorite(Quote quote) {
-    final index = _favorites.indexWhere((q) => q == quote);
+    final exists = _favorites.any((q) => q == quote);
 
-    if (index >= 0) {
-      // Remove from favorites
-      _favorites.removeAt(index);
+    if (exists) {
+      _favorites.removeWhere((q) => q == quote);
     } else {
-      // Add to favorites
       _favorites.add(quote);
     }
+
+    // Save to local storage
+    _saveFavoritesToCache();
 
     notifyListeners();
   }
 
-  /// Check if a quote is favorited
   bool isFavorite(Quote quote) {
     return _favorites.any((q) => q == quote);
   }
 
-  /// Remove a quote from favorites
   void removeFavorite(Quote quote) {
     _favorites.removeWhere((q) => q == quote);
+    
+    // Save to local storage
+    _saveFavoritesToCache();
+    
     notifyListeners();
   }
 
-  /// Helper methods
-  void _setLoading(bool value) {
-    _isLoading = value;
+  /// Private helpers
+
+  /// Load cached favorites from local storage on initialization
+  void _loadCachedFavorites() {
+    if (_localDataSource == null) return;
+
+    try {
+      final cachedFavorites = _localDataSource.loadFavorites();
+      _favorites.clear();
+      _favorites.addAll(cachedFavorites);
+      
+      // No need to notify listeners here - this runs before UI is built
+    } catch (e) {
+      // Fail silently - app continues with empty favorites if cache fails
+    }
+  }
+
+  /// Save current favorites to local storage
+  Future<void> _saveFavoritesToCache() async {
+    if (_localDataSource == null) return;
+
+    try {
+      await _localDataSource.saveFavorites(_favorites);
+    } catch (e) {
+      // Fail silently - don't interrupt user experience if caching fails
+    }
+  }
+
+  void _startLoading() {
+    _isFetching = true;
+    _isLoading = true;
+    notifyListeners();
+  }
+
+  void _stopLoading() {
+    _isFetching = false;
+    _isLoading = false;
     notifyListeners();
   }
 
