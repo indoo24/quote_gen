@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../domain/entities/quote.dart';
 import '../../domain/repositories/quote_repository.dart';
@@ -16,8 +17,9 @@ class ApiQuoteRepository implements QuoteRepository {
   final http.Client _httpClient;
   
   // API endpoint for random quotes
-  static const String _baseUrl = 'https://api.quotable.io';
-  static const String _randomEndpoint = '/random';
+  static const String _baseUrl = 'https://zenquotes.io';
+static const String _randomEndpoint = '/api/random';
+
 
   /// Constructor with dependency injection
   /// Allows for easy testing by injecting mock http client
@@ -47,10 +49,14 @@ class ApiQuoteRepository implements QuoteRepository {
       // Check if request was successful
       if (response.statusCode == 200) {
         // Parse JSON response
-        final jsonData = json.decode(response.body) as Map<String, dynamic>;
-        
-        // Convert to QuoteModel using factory constructor
-        final quoteModel = QuoteModel.fromJson(jsonData);
+        final List<dynamic> jsonList = json.decode(response.body);
+final Map<String, dynamic> jsonData = jsonList.first;
+
+final quoteModel = QuoteModel(
+  text: jsonData['q'] as String,
+  author: jsonData['a'] as String,
+);
+
         
         // Return as domain entity
         // QuoteModel extends Quote, so it's already a Quote entity
@@ -62,8 +68,14 @@ class ApiQuoteRepository implements QuoteRepository {
       } else {
         throw Exception('Failed to load quote. Status code: ${response.statusCode}');
       }
+    } on SocketException {
+      // No internet connection or DNS resolution failed
+      throw Exception('No internet connection. Please check your network settings.');
+    } on HandshakeException {
+      // SSL/TLS handshake error (certificate issues)
+      throw Exception('Secure connection failed. Please check your internet connection and try again.');
     } on http.ClientException {
-      // Network-related errors (no internet, DNS failure, etc.)
+      // Other network-related errors (connection refused, etc.)
       throw Exception('Network error. Please check your internet connection.');
     } on FormatException {
       // JSON parsing errors
